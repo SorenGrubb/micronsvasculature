@@ -1,6 +1,6 @@
 # MICrONS vasculature outline data
 
-Traced vessel centerlines (points + line segments, in physical nanometres of the minnie65 volume) for the [MICrONS → Neuroglancer cell identification tool](https://github.com/SorenGrubb/microns-neuroglancer-tool), split into 10 categories by vessel type and capillary order:
+Traced vessel centerlines (points + line segments, in minnie65 voxel coordinates) for the [MICrONS → Neuroglancer cell identification tool](https://github.com/SorenGrubb/microns-neuroglancer-tool), split into 10 categories by vessel type and capillary order:
 
 | File | Category |
 |---|---|
@@ -28,6 +28,6 @@ Each file has the shape:
 }
 ```
 
-Coordinates are physical nanometres in the same space as MICrONS minnie65 (x/y at 4 nm/voxel, z at 40 nm/voxel, already converted to nm here).
+Coordinates are voxel indices, exactly as they appear in the original Neuroglancer annotation-layer tracings (their own `outputDimensions` transform declares `x`/`y` at 4 nm/voxel and `z` at 40 nm/voxel) — the same convention the main tool uses everywhere else, so no unit conversion is needed when consuming these files. Do not divide by 4/40 again.
 
 This repo exists purely as a lightweight CDN target (via [jsDelivr](https://www.jsdelivr.com/)) for the main tool, which lazy-fetches only the categories a user toggles on rather than embedding ~52 MB of raw tracing data in the tool itself. Source tracings by Søren Grubb.
