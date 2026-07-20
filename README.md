@@ -84,6 +84,23 @@ Verified by sampling the traced vessel path every 500 nm and testing each sample
 
 The remaining uncovered percentage is concentrated in the pial categories, whose vessels run diagonally along the cortical surface — an axis-aligned ellipsoid fundamentally cannot follow a diagonal run without either leaving a gap or being fattened past the vessel's real diameter, and fattening was judged the worse error. Closing that last few percent would require an annotation type Neuroglancer does not offer.
 
+**Anti-spike limit and short-run merging** (`extract_pack_v10.py`, current version). An intermediate version stretched each ellipsoid to whatever length closed its gap, which produced long needles standing perpendicular to the vessels — because an axis-aligned ellipsoid elongated along axis A, on a vessel running at angle θ off A, protrudes sideways by roughly L·sin(θ). Elongation is now bounded by **L ≤ W/sin(θ)** (W = the vessel's own half-width): the length at which the ellipsoid would just leave its lumen. Worst-case elongation fell from ~217× to ~11×, with 3–5× at the 99th percentile.
+
+A final **short-run merge** then brings the count down, following Søren's two observations: comparable radius is used as the same-vessel signal for which neighbours may combine ("a large ellipsoid near a large ellipsoid belongs to the same vessel"), and each run of up to 3 neighbours collapses into a single ellipsoid *elongated* to span them at the members' own widest width plus a small margin — not fattened. Short runs are what make this safe under the anti-spike rule: spanning 2–3 neighbours keeps the half-length small enough to stay inside the vessel, and any merge that would violate the limit is rejected with its originals kept, so the pass can only reduce count, never reintroduce needles.
+
+Two failed variants are recorded because they bracket the working rule: containing merely the members' *centres* let their flanks stick out (uncovered path points jumped from ~1% to ~8%), while demanding full containment of each member's width is geometrically impossible — a merged ellipsoid tapers, so at any axial offset its cross-section is narrower than the member sitting there, and 0% of merges qualified. The working rule tests coverage of the vessel *path* the members spanned and rejects runs that bow off a straight line.
+
+**Validation against the original traced perimeter** (`validate_vs_outline.py`, added at Søren's suggestion) reports two metrics, since each approach fails in a different direction: *coverage* (what fraction of traced perimeter points fall inside some output ellipsoid — low means missing vessel) and *spill* (how far points sampled from inside the output ellipsoids sit from the nearest traced point — high means occupying space where no vessel was traced, which is what a needle does). For `penetrating_arterioles`:
+
+| version | n | coverage | spill p95 | spill max |
+|---|---|---|---|---|
+| depth-aware + merge (`v7`) | 4546 | 66.1% | 4.6 µm | 16.6 µm |
+| unbounded stretching (`v8`) | 6254 | 76.5% | 13.2 µm | 57.9 µm |
+| anti-spike (`v9`) | 7926 | 70.4% | 4.2 µm | 15.6 µm |
+| **anti-spike + run merge (`v10`)** | **3448** | **78.6%** | **4.4 µm** | 23.0 µm |
+
+The current version has both the fewest annotations and the best coverage of any version tried. Encoded sizes: pial_arterioles 0.11 MB, penetrating_arterioles 0.48 MB, ascending_venules 0.78 MB, pial_venules 0.31 MB — well under the tool's 1.95 MB warning threshold.
+
 If a category's outline still looks unacceptably coarse, sized wrong, gappy, or the file is unusably large, tell the tool's maintainer which category and what's wrong — the RDP tolerance (capillaries); the endpoint-gap threshold or minimum-radius floor (ring/arc pairing, 200 nm / 50 nm); the k-d tree candidate count, normal-alignment floor, edge-length cap (vessel graph, currently 20 candidates / cos(78°) / 20,000 nm); or the merge alignment threshold, width-ratio limit, or max merge span (capsule merging, currently 70% / 2.0× / 60,000 nm) are the parameters to revisit.
 
 `arterial_cap_order3.json` uses the `"3. order1"` (unarchived / current) layer from the July 2026 export of `arterial 3 order cap.txt`, not the earlier `"3. order"` layer, which was an unfinished pass.
