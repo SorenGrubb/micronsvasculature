@@ -40,7 +40,24 @@ This repo exists purely as a lightweight fetch target for the main tool (via `ra
 
 Neuroglancer local annotations are embedded directly in the viewer's state JSON, which then goes in the URL — so unlike a normal download, size here is bounded by URL length rather than file size. The raw hand tracings (up to ~57,000 line segments for one category) exceeded that limit and silently failed to open in Neuroglancer.
 
-**Capillaries** (`arterial_cap_order1/2/3`, `venous_cap_order1/2/3`) are still line-based: each traced vessel is decomposed into its connected "chain" between branch points and free ends, then simplified with Ramer–Douglas–Peucker at a 300 nm tolerance to drop interior points that don't meaningfully change the path. `venous_cap_order2` and `venous_cap_order3` additionally have whole chains subsampled (after sorting into Z-order/Morton code, so the retained subset stays evenly spread rather than clustering), since most of their segment count comes from capillary *count* rather than per-capillary detail.
+**Capillaries** (`arterial_cap_order1/2/3`, `venous_cap_order1/2/3`) are also ellipsoids now, but built a different way, because the source data is a different *kind* of tracing. Checked before writing any of it: capillary chains are open **centreline paths** — end-to-end distance is ~0.9× the path length, median length ~20-25 µm, and essentially none close into a ring — whereas the arteriole/venule chains are planar cross-section outlines around a lumen. So there is no perimeter here to fit a radius to; the traced line *is* the vessel's course, and calibre has to come from anatomy instead.
+
+Søren supplied that calibre per order, tapering along the vessel:
+
+| order | diameter |
+|---|---|
+| 1st | 8 → 5 µm |
+| 2nd | 5 → 3 µm |
+| 3rd | 3 µm throughout |
+
+The taper runs outward from the parent vessel: an arterial capillary starts at its feeding arteriole and thins, a venous one at its draining venule. Which end of a given traced chain is the parent end is decided per chain by testing both endpoints against the traced arteriole/venule points and taking the nearer one, so a chain traced in either direction still tapers correctly (39–460 chains per category were reversed on this basis). Capsules are then laid along the centreline under the same anti-spike limit used for the major vessels, and run-merged.
+
+Two bugs found and fixed here, both caught by measurement rather than by eye:
+
+- *Run merging had to be restricted to within a single centreline.* The merge pass keys off radius similarity as a same-vessel signal, which works on the major vessels because their calibre varies — but every capillary of a given order is assigned the *same* prescribed diameter, so that signal carries no information and the pass fused capsules from different capillaries that merely pass near each other.
+- *Capsules were too short relative to their spacing.* An ellipsoid narrows toward its tips (cross-section `w·√(1−(x/L)²)`), so capsules barely longer than the span they covered were down to ~45% of full width where they met, and the centreline slipped outside in between — only 34% of the 3rd-order venous centreline was covered. At a 1.7 length-to-span ratio the join sits at ~81% of full width, and coverage is 97–99%.
+
+Verified against the traced centrelines: 97.4–98.9% of traced points fall inside some capsule, with interior sample points sitting a median 0.6–1.4 vessel radii from the centreline (i.e. roughly where the lumen wall should be). Note that `venous_cap_order2` and `venous_cap_order3` previously had **half their chains dropped** by Morton-order subsampling to control size; that subsampling is gone, so every traced capillary is now present. Their higher ellipsoid counts buy back real vessels rather than added detail.
 
 **Major vessels** (`pial_arterioles`, `penetrating_arterioles`, `ascending_venules`, `pial_venules`) are packed as **ellipsoids**, not lines. Two earlier approaches were tried and rejected first: dropping whole chains (e.g. keeping only every 4th penetrating arteriole) visibly thinned out the vessel pattern — missing whole arterioles/venules reads very differently from a coarser line through the same ones, so it was reverted; a looser RDP tolerance (1000 nm) with no chain-dropping kept every vessel but still wasn't small enough for two categories to reliably open.
 
